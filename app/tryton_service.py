@@ -45,7 +45,8 @@ class TrytonService:
     def authenticate(self, username: str, password: str) -> AuthenticatedUser | None:
         self.startup()
         User = self.pool.get("res.user")
-        user_id = User.get_login(username, {"password": password})
+        with Transaction().start(settings.tryton_database, 0, readonly=True):
+            user_id = User.get_login(username, {"password": password})
         if not user_id:
             return None
         return AuthenticatedUser(user_id=user_id, username=username)
