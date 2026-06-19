@@ -1,64 +1,108 @@
 # External Client Test API
 
-Small FastAPI service that authenticates users against Tryton and exposes a protected patients endpoint for the SvelteKit frontend.
+Small FastAPI service that authenticates users against Tryton/GNU Health and exposes a protected patients endpoint for external frontends (SvelteKit or similar).
 
 ## Python version
 
-Use Python 3.10 to stay aligned with the dashboard environment.
+Use Python 3.10+ aligned with the GNU Health venv environment.
 
 ## Setup
 
-```powershell
+```bash
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate        # Linux
+# .venv\Scripts\activate         # Windows
 pip install -r requirements.txt
-Copy-Item .env.example .env
+cp .env.example .env
 ```
 
-This API now follows the dashboard pattern by default:
+## Configuración: Test vs Producción
 
-- it uses the repo's existing `trytond.conf`
-- it defaults to the `health` database
+### Desarrollo / Test local
 
-So for a quick test on the same server, you usually only need to edit `.env` to set a real `API_SESSION_SECRET`.
+CORS abierto a cualquier origen (para facilitar pruebas desde cualquier cliente o herramienta como Postman, Bruno, etc).
 
-Only add `TRYTON_CONFIG` or `TRYTON_DATABASE` to `.env` if your server uses different values than the dashboard.
+**`app/main.py`:**
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,   # debe ser False si origins="*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
 
-Example minimal `.env`:
-
+**`.env` mínimo para test:**
 ```env
 API_HOST=127.0.0.1
 API_PORT=8001
-API_SESSION_SECRET=replace-this-with-a-long-random-value
+API_SESSION_SECRET=cualquier-valor-para-test
+TRYTON_CONFIG=/etc/gnuhealth/trytond.conf
+TRYTON_DATABASE=gnuhealth
 TRYTON_PATIENT_LIMIT=500
 ```
 
-Optional overrides:
+### Producción
 
+CORS restringido a los orígenes del frontend real. `allow_credentials=True` para soportar cookies de sesión si se usan.
+
+**`app/main.py`:**
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://mi-frontend.example.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+**`.env` para producción:**
 ```env
-TRYTON_CONFIG=/path/to/your/real/trytond.conf
-TRYTON_DATABASE=health
+API_HOST=127.0.0.1
+API_PORT=8001
+API_SESSION_SECRET=valor-largo-aleatorio-seguro   # openssl rand -hex 32
+TRYTON_CONFIG=/etc/gnuhealth/trytond.conf
+TRYTON_DATABASE=gnuhealth                          # verificar con: psql -U gnuhealth -l
+TRYTON_PATIENT_LIMIT=500
 ```
 
-## Run
+> **Importante:** `TRYTON_CONFIG` debe apuntar a `/etc/gnuhealth/trytond.conf` en el servidor de producción GNU Health. Si esta variable falta o tiene un valor incorrecto, trytond cae a un backend SQLite por defecto y el servidor no levanta.
 
-```powershell
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+### Tabla resumen
+
+| Variable | Test | Producción |
+|---|---|---|
+| `allow_origins` | `["*"]` | `["https://tu-frontend.com"]` |
+| `allow_credentials` | `False` | `True` |
+| `API_SESSION_SECRET` | cualquier valor | string aleatorio seguro (`openssl rand -hex 32`) |
+| `TRYTON_CONFIG` | `/etc/gnuhealth/trytond.conf` | `/etc/gnuhealth/trytond.conf` |
+| `TRYTON_DATABASE` | nombre real de la BD | nombre real de la BD |
+
+## Despliegue en producción (GNU Health server)
+
+```bash
+# En /opt/gnuhealth/custom_modules/external-client-test-backend/
+git pull
+# editar .env con valores de producción
+source /opt/gnuhealth/venv/bin/activate
+uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-If you keep the default layout from this repository, the API will automatically look for:
-
-```text
-<repo-root>/trytond.conf
-```
+Para correr como servicio systemd ver la documentación del servidor.
 
 ## Endpoints
 
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /patients`
-- `GET /health`
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/health` | No | Health check |
+| `POST` | `/auth/login` | No | Login con credenciales Tryton |
+| `POST` | `/auth/logout` | Bearer token | Invalida la sesión |
+| `GET` | `/patients` | Bearer token | Lista de pacientes (hasta `TRYTON_PATIENT_LIMIT`) |
 
-## Notes
+## Notas
 
-This prototype uses in-memory API sessions. Restarting the API clears them.
+- Sesiones en memoria: se pierden al reiniciar el proceso.
+- El token de sesión es HMAC-SHA256 firmado con `API_SESSION_SECRET`, TTL 8 horas.
+- Autenticación delegada a `res.user` de Tryton; permisos de pacientes respetan el contexto del usuario autenticado.
