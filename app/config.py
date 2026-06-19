@@ -10,10 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-BASE_DIR = Path(__file__).resolve().parent
-API_DIR = BASE_DIR.parent
-PROJECT_ROOT = API_DIR.parent.parent
-DEFAULT_TRYTON_CONFIG = PROJECT_ROOT / "trytond.conf"
+DEFAULT_TRYTON_CONFIG = Path("/etc/gnuhealth/trytond.conf")
 
 
 @dataclass(frozen=True)
