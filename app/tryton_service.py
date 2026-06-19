@@ -61,14 +61,22 @@ class TrytonService:
         with Transaction().start(settings.tryton_database, user_id, readonly=True):
             patients = Patient.search([], limit=patient_limit, order=[("id", "ASC")])
             for patient in patients:
-                party = patient.name
+                # Campo que linkea a party.party varía según versión de GNU Health
+                party = None
+                for field in ("name", "party", "person"):
+                    try:
+                        party = getattr(patient, field)
+                        break
+                    except AttributeError:
+                        continue
+
                 rows.append(
                     {
                         "id": patient.id,
-                        "code": getattr(party, "ref", None),
-                        "display_name": getattr(party, "rec_name", str(patient)),
+                        "code": getattr(party, "ref", None) if party else None,
+                        "display_name": getattr(party, "rec_name", None) or patient.rec_name,
                         "gender": getattr(patient, "gender", None),
-                        "birth_date": getattr(party, "dob", None),
+                        "birth_date": getattr(party, "dob", None) if party else None,
                         "active": getattr(patient, "active", None),
                     }
                 )
