@@ -92,6 +92,40 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001
 
 Para correr como servicio systemd ver la documentación del servidor.
 
+## Acceso desde red local (test)
+
+Por defecto uvicorn escucha solo en `127.0.0.1` — no acepta conexiones externas. Para acceder desde otro equipo en la red:
+
+**1. Correr uvicorn en todas las interfaces:**
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+**2. Abrir puerto 8001 en el firewall del servidor (openSUSE/SLES):**
+
+```bash
+# Ver estado del firewall
+sudo firewall-cmd --state
+
+# Abrir puerto 8001 temporalmente (se pierde al reiniciar firewalld)
+sudo firewall-cmd --add-port=8001/tcp
+
+# Abrir puerto 8001 de forma permanente
+sudo firewall-cmd --add-port=8001/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+Alternativa — desactivar firewall temporalmente solo para pruebas:
+
+```bash
+sudo systemctl stop firewalld
+# para reactivar:
+sudo systemctl start firewalld
+```
+
+> **Nunca dejar el firewall desactivado ni el puerto 8001 abierto en producción real.** Para producción, el frontend debe estar en el mismo servidor o acceder a través de nginx con proxy inverso.
+
 ## Endpoints
 
 | Método | Ruta | Auth | Descripción |
